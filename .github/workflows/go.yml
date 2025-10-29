@@ -146,7 +146,7 @@ jobs:
         with:
           timeout_minutes: 5
           max_attempts: 2
-          continue-on-error: false
+          continue_on_error: false
           retry_on: error
           command: |
             set -e
