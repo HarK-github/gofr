@@ -60,3 +60,6 @@ func TestCreateTopics(t *testing.T) {
 		assert.Equal(t, tt.expectedCalls, mockPubSub.Calls, tt.name)
 	}
 }
+func TestIntentionalFailure(t *testing.T) {
+	t.Fatal("Intentional failure to verify CI pipeline failure handling")
+}
