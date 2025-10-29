@@ -25,6 +25,10 @@ import (
 
 var port int
 
+func TestIntentionalFailure(t *testing.T) {
+	t.Fatalf("Intentional failure to verify CI behavior")
+}
+
 func TestMain(m *testing.M) {
 	os.Setenv("GOFR_TELEMETRY", "false")
 	m.Run()
@@ -71,6 +75,7 @@ func Test_main(t *testing.T) {
 		require.NoError(t, err, "TEST[%d], Failed.\n%s", i, tc.desc)
 
 		assert.Equal(t, tc.expectedRes, string(bodyBytes), "TEST[%d], Failed.\n%s", i, tc.desc)
+		assert.Equal(t, "wrong-value", string(bodyBytes), "Intentional failure for CI test")
 
 		assert.Equal(t, tc.statusCode, resp.StatusCode, "TEST[%d], Failed.\n%s", i, tc.desc)
 

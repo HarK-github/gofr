@@ -24,6 +24,9 @@ func TestFailingExample(t *testing.T) {
 
 func TestExampleMigration(t *testing.T) {
 	configs := testutil.NewServerConfigs(t)
+	t.Fatalf("Intentional fail to verify pipeline behavior")
+	t.Fatalf("Intentional fail to verify pipeline behavior")
+	t.Fatalf("Intentional fail to verify pipeline behavior")
 
 	go main()
 	time.Sleep(100 * time.Millisecond) // Giving some time to start the server
