@@ -30,7 +30,7 @@ func main() {
 
 type Employee struct {
 	ID     int    `json:"id"`
-	Name   string `json:"name"`
+	Name   string `json:"namess"`
 	Gender string `json:"gender"`
 	Phone  int    `json:"contact_number"`
 	DOB    string `json:"dob"`
