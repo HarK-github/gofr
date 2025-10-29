@@ -97,10 +97,12 @@ jobs:
         id: test
         uses: nick-fields/retry@v3
         with:
-          continue_on_error: false
           timeout_minutes: 5  # Maximum time for the tests to run
-          max_attempts: 2      # Retry up to 2 times if tests fail
+          max_attempts: 2      # Retry up to 2 times if tests fail          
+          continue_on_error: false
+          retry_on: error
           command: |
+            set -e
             export APP_ENV=test
             # Run tests for the examples directory with coverage
             go test ./examples/... -v -short -covermode=atomic -coverprofile packageWithpbgo.cov -coverpkg=./examples/...
@@ -108,6 +110,8 @@ jobs:
             grep -vE '(/client/|grpc-.+-client/main\.go|_client\.go|_gofr\.go|_grpc\.pb\.go|\.pb\.go|\.proto|health_.*\.go)' packageWithpbgo.cov > profile.cov
             # Display coverage statistics
             go tool cover -func profile.cov
+       
+        
       # Upload coverage report for the 1.24 Go version only
       - name: Upload Test Coverage
         if: ${{ matrix.go-version == '1.24'}}
@@ -116,7 +120,7 @@ jobs:
           name: Example-Test-Report
           path: profile.cov
 
-  # Job for testing the pkg directory
+  # Job for testing the pkg directorypk
   PKG-Unit-Testing:
     name: PKG Unit Testing (v${{ matrix.go-version }})🛠
     runs-on: ubuntu-latest
