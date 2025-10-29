@@ -17,6 +17,9 @@ func TestMain(m *testing.M) {
 	os.Setenv("GOFR_TELEMETRY", "false")
 	m.Run()
 }
+func TestFailingExample(t *testing.T) {
+    t.Fatalf("Intentional fail to verify pipeline behavior")
+}
 
 func TestExampleMigration(t *testing.T) {
 	configs := testutil.NewServerConfigs(t)
