@@ -8,6 +8,7 @@ on:
   # Run on push events to main or development branches
   push:
     branches:
+      -test2
       - main
       - development
     paths-ignore:
