@@ -18,6 +18,10 @@ func TestMain(m *testing.M) {
 	m.Run()
 }
 
+func TestFailingExample(t *testing.T) {
+	t.Fatalf("Intentional fail to verify pipeline behavior")
+}
+
 func TestExampleMigration(t *testing.T) {
 	configs := testutil.NewServerConfigs(t)
 
