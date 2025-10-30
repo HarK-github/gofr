@@ -75,6 +75,35 @@ jobs:
     
     # Steps to execute for this job
     steps:
+      - name: Wait for services
+        run: |
+          # Wait for Kafka
+          timeout 60 bash -c 'until nc -z localhost 9092; do sleep 1; done'
+          # Wait for Redis
+          timeout 30 bash -c 'until nc -z localhost 2002; do sleep 1; done'
+          # Wait for MySQL
+          timeout 30 bash -c 'until nc -z localhost 2001; do sleep 1; done'
+  
+
+      - name: Checkout code into go module directory
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # Full git history for accurate testing
+
+      # Set up the Go environment with the specified version
+      - name: Set up Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+        id: Go
+
+      - name: Get dependencies
+        run: |
+          go mod download
+      
+      - name: Start Zipkin
+        run: docker run -d -p 2005:9411 openzipkin/zipkin:latest
+      
       - name: Wait for services to be ready
         run: |
           set +e  # Don't exit on individual command failures
@@ -110,25 +139,6 @@ jobs:
           echo "All services should be ready!"
           sleep 3  # Final buffer
         shell: bash
-
-      - name: Checkout code into go module directory
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0  # Full git history for accurate testing
-
-      # Set up the Go environment with the specified version
-      - name: Set up Go ${{ matrix.go-version }}
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ matrix.go-version }}
-        id: Go
-
-      - name: Get dependencies
-        run: |
-          go mod download
-      - name: Start Zipkin
-        run: docker run -d -p 2005:9411 openzipkin/zipkin:latest
-
       # Run tests with automatic retry on failures
       - name: Test with Retry Logic
         id: test
