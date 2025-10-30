@@ -9,7 +9,6 @@ on:
   push:
     branches:
       - main
-      - test3
       - development
     paths-ignore:
       - 'docs/**'  # Ignore changes to docs folder
@@ -89,6 +88,7 @@ jobs:
       - name: Get dependencies
         run: |
           go mod download
+
       - name: Start Zipkin
         run: docker run -d -p 2005:9411 openzipkin/zipkin:latest
 
@@ -98,11 +98,8 @@ jobs:
         uses: nick-fields/retry@v3
         with:
           timeout_minutes: 5  # Maximum time for the tests to run
-          max_attempts: 2      # Retry up to 2 times if tests fail          
-          continue_on_error: false
-          retry_on: error
+          max_attempts: 2      # Retry up to 2 times if tests fail
           command: |
-            set -e
             export APP_ENV=test
             # Run tests for the examples directory with coverage
             go test ./examples/... -v -short -covermode=atomic -coverprofile packageWithpbgo.cov -coverpkg=./examples/...
@@ -119,7 +116,7 @@ jobs:
           name: Example-Test-Report
           path: profile.cov
 
-  # Job for testing the pkg directorypk
+  # Job for testing the pkg directory
   PKG-Unit-Testing:
     name: PKG Unit Testing (v${{ matrix.go-version }})🛠
     runs-on: ubuntu-latest
@@ -143,6 +140,7 @@ jobs:
       - name: Get dependencies
         run: |
           go mod download
+
       # Run pkg tests with automatic retry logic
       - name: Test with Retry Logic
         id: test
@@ -150,11 +148,10 @@ jobs:
         with:
           timeout_minutes: 5
           max_attempts: 2
-          continue_on_error: false
           retry_on: error
           command: |
-            set -e
             export APP_ENV=test
+
             # Run tests for root gofr package
             go test -v -short -covermode=atomic \
               -coverpkg=./pkg/gofr -coverprofile=gofr_only.cov ./pkg/gofr
@@ -166,6 +163,7 @@ jobs:
               echo "::error::Root gofr package tests failed"
               exit $exit_code
             fi
+
             # Run tests for sub-packages
             go test -v -covermode=atomic \
               -coverpkg=./pkg/gofr -coverprofile=submodules.cov ./pkg/gofr/...
@@ -177,10 +175,13 @@ jobs:
               echo "::error::Gofr sub-packages tests failed"
               exit $exit_code
             fi
+
             # Combine coverage profiles
             echo "mode: atomic" > profile.cov
             grep -h -v "mode:" gofr_only.cov submodules.cov | grep -v '/mock_' >> profile.cov
+
             # Show coverage summary
+            go tool cover -func profile.cov
 
       # Upload coverage report for the 1.24 Go version only
       - name: Upload Test Coverage
@@ -212,7 +213,7 @@ jobs:
         run: |
           echo "mode: atomic" > merged_profile.cov
           grep -h -v "mode:" ./Example-Test-Report/profile.cov ./PKG-Coverage-Report/profile.cov >> merged_profile.cov
-      
+
       # Calculate and output the total code coverage percentage
       - name: Parse code-coverage value
         working-directory: artifacts
@@ -321,6 +322,7 @@ jobs:
         run: |
           curl https://qlty.sh | sh
           echo "$HOME/.qlty/bin" >> $GITHUB_PATH
+
       # Download coverage artifacts
       - name: Download Coverage Report
         uses: actions/download-artifact@v6
@@ -333,7 +335,6 @@ jobs:
         run: |
           echo "mode: atomic" > merged_profile.cov
           grep -h -v "mode:" ./Example-Test-Report/profile.cov ./PKG-Coverage-Report/profile.cov >> merged_profile.cov
-             '
 
           # Generate and print total coverage percentage
           echo "Total Coverage:"
