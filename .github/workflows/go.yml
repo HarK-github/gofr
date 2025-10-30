@@ -9,7 +9,7 @@ on:
   push:
     branches:
       - main
-      - fuck
+      - test2
       - development
     paths-ignore:
       - 'docs/**'  # Ignore changes to docs folder
@@ -38,37 +38,36 @@ jobs:
 
     # Define service containers that tests depend on
     services:
-      # Kafka service — expose host port 1092 so tests using localhost:1092 connect to Kafka
+      # Kafka service
       kafka:
         image: bitnamilegacy/kafka:3.4.1
         ports:
-          - "1092:9092"
+          - "9092:9092"
         env:
           KAFKA_ENABLE_KRAFT: yes
           KAFKA_CFG_PROCESS_ROLES: broker,controller
           KAFKA_CFG_CONTROLLER_LISTENER_NAMES: CONTROLLER
           KAFKA_CFG_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
           KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
-          # advertise the host port that tests use
-          KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://127.0.0.1:1092
+          KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://127.0.0.1:9092
           KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: true
           KAFKA_BROKER_ID: 1
           KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 1@127.0.0.1:9093
           ALLOW_PLAINTEXT_LISTENER: yes
           KAFKA_CFG_NODE_ID: 1
 
-      # Redis service — tests expect Redis at localhost:2001, so expose 2001
+      # Redis service
       redis:
         image: redis:7.0.5
         ports:
-          - "2001:6379"
+          - "2002:6379"
         options: "--entrypoint redis-server"
 
-      # MySQL service — move MySQL to a different host port to avoid conflict with Redis
+      # MySQL service
       mysql:
         image: mysql:8.2.0
         ports:
-          - "2002:3306"
+          - "2001:3306"
         env:
           MYSQL_ROOT_PASSWORD: "password"
           MYSQL_DATABASE: "test"
@@ -93,44 +92,6 @@ jobs:
       - name: Start Zipkin
         run: docker run -d -p 2005:9411 openzipkin/zipkin:latest
 
-      # Wait for service ports to be ready before running tests (prevents race conditions)
-      
-      - name: Wait for services to be ready
-        run: |
-          set +e  # Don't exit on individual command failures
-          
-          echo "Waiting for MySQL on 127.0.0.1:2002..."
-          for i in {1..60}; do
-            if timeout 2 bash -c 'echo > /dev/tcp/127.0.0.1/2002' 2>/dev/null; then
-              echo "✓ MySQL port is open"
-              sleep 2  # Give MySQL time to fully initialize
-              break
-            fi
-            echo "  Attempt $i/60..."
-            sleep 1
-          done
-          echo "Waiting for Redis on 127.0.0.1:2001..."
-          for i in {1..60}; do
-            if timeout 2 bash -c 'echo > /dev/tcp/127.0.0.1/2001' 2>/dev/null; then
-              echo "✓ Redis port is open"
-              break
-            fi
-            echo "  Attempt $i/60..."
-            sleep 1
-          done
-          echo "Waiting for Kafka on 127.0.0.1:1092..."
-          for i in {1..60}; do
-            if timeout 2 bash -c 'echo > /dev/tcp/127.0.0.1/1092' 2>/dev/null; then
-              echo "✓ Kafka port is open"
-              break
-            fi
-            echo "  Attempt $i/60..."
-            sleep 1
-          done
-          echo "All services should be ready!"
-          sleep 3  # Final buffer
-        shell: bash
-
       # Run tests with automatic retry on failures
       - name: Test with Retry Logic
         id: test
@@ -139,7 +100,6 @@ jobs:
           timeout_minutes: 5  # Maximum time for the tests to run
           max_attempts: 2      # Retry up to 2 times if tests fail
           command: |
-            set -e
             export APP_ENV=test
             # Run tests for the examples directory with coverage
             go test ./examples/... -v -short -covermode=atomic -coverprofile packageWithpbgo.cov -coverpkg=./examples/...
@@ -147,7 +107,6 @@ jobs:
             grep -vE '(/client/|grpc-.+-client/main\.go|_client\.go|_gofr\.go|_grpc\.pb\.go|\.pb\.go|\.proto|health_.*\.go)' packageWithpbgo.cov > profile.cov
             # Display coverage statistics
             go tool cover -func profile.cov
-            
       # Upload coverage report for the 1.24 Go version only
       - name: Upload Test Coverage
         if: ${{ matrix.go-version == '1.24'}}
@@ -180,7 +139,6 @@ jobs:
       - name: Get dependencies
         run: |
           go mod download
-          
       # Run pkg tests with automatic retry logic
       - name: Test with Retry Logic
         id: test
@@ -188,8 +146,10 @@ jobs:
         with:
           timeout_minutes: 5
           max_attempts: 2
+          continue-on-error: false
           retry_on: error
           command: |
+            set -e
             export APP_ENV=test
             # Run tests for root gofr package
             go test -v -short -covermode=atomic \
