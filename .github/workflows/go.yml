@@ -75,15 +75,41 @@ jobs:
     
     # Steps to execute for this job
     steps:
-      - name: Wait for services
+      - name: Wait for services to be ready
         run: |
-          # Wait for Kafka
-          timeout 60 bash -c 'until nc -z localhost 9092; do sleep 1; done'
-          # Wait for Redis
-          timeout 30 bash -c 'until nc -z localhost 2002; do sleep 1; done'
-          # Wait for MySQL
-          timeout 30 bash -c 'until nc -z localhost 2001; do sleep 1; done'
-  
+          set +e  # Don't exit on individual command failures
+          
+          echo "Waiting for MySQL on 127.0.0.1:2002..."
+          for i in {1..60}; do
+            if timeout 2 bash -c 'echo > /dev/tcp/127.0.0.1/2002' 2>/dev/null; then
+              echo "✓ MySQL port is open"
+              sleep 2  # Give MySQL time to fully initialize
+              break
+            fi
+            echo "  Attempt $i/60..."
+            sleep 1
+          done
+          echo "Waiting for Redis on 127.0.0.1:2001..."
+          for i in {1..60}; do
+            if timeout 2 bash -c 'echo > /dev/tcp/127.0.0.1/2001' 2>/dev/null; then
+              echo "✓ Redis port is open"
+              break
+            fi
+            echo "  Attempt $i/60..."
+            sleep 1
+          done
+          echo "Waiting for Kafka on 127.0.0.1:1092..."
+          for i in {1..60}; do
+            if timeout 2 bash -c 'echo > /dev/tcp/127.0.0.1/1092' 2>/dev/null; then
+              echo "✓ Kafka port is open"
+              break
+            fi
+            echo "  Attempt $i/60..."
+            sleep 1
+          done
+          echo "All services should be ready!"
+          sleep 3  # Final buffer
+        shell: bash
 
       - name: Checkout code into go module directory
         uses: actions/checkout@v5
