@@ -10,6 +10,7 @@ on:
     branches:
       - main
       - test2
+      - fuck
       - development
     paths-ignore:
       - 'docs/**'  # Ignore changes to docs folder
