@@ -150,6 +150,7 @@ jobs:
           continue-on-error: false
           retry_on: error
           command: |
+            set -e
             export APP_ENV=test
             # Run tests for root gofr package
             go test -v -short -covermode=atomic \
