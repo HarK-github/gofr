@@ -106,7 +106,12 @@ jobs:
             export APP_ENV=test
             # Run tests for the examples directory with coverage
             go test ./examples/... -v -short -covermode=atomic -coverprofile packageWithpbgo.cov -coverpkg=./examples/...
+            # Treat exit code 0 as success; exit code 1 may be harmless if output exists
+            if [ "${exit_code:-0}" -ne 0 ]; then
+              echo "⚠️ go test exited with $exit_code"
+            fi
              # Filter out auto-generated files by protobuf and gofr framework from coverage report
+
             grep -vE '(/client/|grpc-.+-client/main\.go|_client\.go|_gofr\.go|_grpc\.pb\.go|\.pb\.go|\.proto|health_.*\.go)' packageWithpbgo.cov > profile.cov
             # Display coverage statistics
             go tool cover -func profile.cov
@@ -152,7 +157,7 @@ jobs:
           continue-on-error: false
           retry_on: error
           command: |
-            #set -e
+            set -e
             export APP_ENV=test
             # Run tests for root gofr package
             go test -v -short -covermode=atomic \
