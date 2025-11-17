@@ -34,7 +34,11 @@ jobs:
         go-version: ['1.25','1.24', '1.23']
       # Continue with other jobs if one version fails
       fail-fast: false
-
+    name: Wait for services to be ready
+    run: |
+      timeout 60s bash -c 'until nc -z localhost 9092; do sleep 2; done'  # Kafka
+      timeout 30s bash -c 'until nc -z localhost 2002; do sleep 2; done'  # Redis
+      timeout 30s bash -c 'until nc -z localhost 2001; do sleep 2; done'  # MySQL
     # Define service containers that tests depend on
     services:
       # Kafka service
