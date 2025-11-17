@@ -54,24 +54,11 @@ jobs:
           KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 1@127.0.0.1:9093
           ALLOW_PLAINTEXT_LISTENER: yes
           KAFKA_CFG_NODE_ID: 1
-        options: >-
-          --health-cmd="/bin/bash -c 'nc -z localhost 9092'"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=10
-          --health-start-period=30s
-
       # Redis service with health check
       redis:
         image: redis:7.0.5
         ports:
           - "6379:6379"
-        options: >-
-          --entrypoint redis-server
-          --health-cmd="redis-cli ping"
-          --health-interval=5s
-          --health-timeout=3s
-          --health-retries=5
 
       # MySQL service with health check
       mysql:
@@ -81,12 +68,6 @@ jobs:
         env:
           MYSQL_ROOT_PASSWORD: "password"
           MYSQL_DATABASE: "test"
-        options: >-
-          --health-cmd="mysqladmin ping -h localhost -ppassword --silent"
-          --health-interval=5s
-          --health-timeout=5s
-          --health-retries=10
-          --health-start-period=10s
 
     # Steps to execute for this job
     steps:
