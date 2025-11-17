@@ -1,108 +1,67 @@
 package main
 
 import (
-	"encoding/json"
-	"errors"
-	"fmt"
-	"io"
-	"sync"
-	"time"
-
-	"github.com/redis/go-redis/v9"
+	"net/http"
+	"net/http/httptest"
+	"testing"
 
 	"gofr.dev/pkg/gofr"
-	"gofr.dev/pkg/gofr/datasource"
 )
 
-func main() {
-	// Create a new application
-	a := gofr.New()
+func TestFailingRoute(t *testing.T) {
+	// Create a test app instance
+	app := gofr.New()
 
-	//HTTP service with default health check endpoint
-	a.AddHTTPService("anotherService", "http://localhost:9000")
+	// Add a route that we know will fail
+	app.GET("/failing-test", func(c *gofr.Context) (interface{}, error) {
+		// This will cause a division by zero panic when accessed
+		var zero int
+		result := 1 / zero
+		return result, nil
+	})
 
-	// Add all the routes
-	a.GET("/hello", HelloHandler)
-	a.GET("/error", ErrorHandler)
-	a.GET("/redis", RedisHandler)
-	a.GET("/trace", TraceHandler)
-	a.GET("/mysql", MysqlHandler)
+	// Create a test request for the failing route
+	req := httptest.NewRequest("GET", "/failing-test", nil)
+	w := httptest.NewRecorder()
 
-	// Run the application
-	a.Run()
+	// This should cause a panic and fail the test
+	defer func() {
+		if r := recover(); r == nil {
+			// If we didn't panic, that's unexpected - fail the test
+			t.Errorf("The code did not panic as expected")
+		}
+	}()
+
+	app.Server.HTTP.ServeHTTP(w, req)
 }
 
-func HelloHandler(c *gofr.Context) (any, error) {
-	name := c.Param("name")
-	if name == "" {
-		c.Log("Name came empty")
-		name = "World"
-	}
+func TestAlwaysFailingAssertion(t *testing.T) {
+	// This test will always fail due to a false assertion
+	expected := "hello"
+	actual := "world"
 
-	return fmt.Sprintf("Hello %s!", name), nil
+	if expected != actual {
+		t.Errorf("This test is designed to fail. Expected: %s, Got: %s", expected, actual)
+	}
 }
 
-func ErrorHandler(c *gofr.Context) (any, error) {
-	return nil, errors.New("some error occurred")
-}
+func TestPanicInHandler(t *testing.T) {
+	app := gofr.New()
 
-func RedisHandler(c *gofr.Context) (any, error) {
-	val, err := c.Redis.Get(c, "test").Result()
-	if err != nil && err != redis.Nil { // If key is not found, we are not considering this an error and returning "".
-		return nil, datasource.ErrorDB{Err: err, Message: "error from redis db"}
+	// Add a handler that explicitly panics
+	app.GET("/panic-route", func(c *gofr.Context) (interface{}, error) {
+		panic("This is a deliberate panic to fail the test")
+	})
+
+	req := httptest.NewRequest("GET", "/panic-route", nil)
+	w := httptest.NewRecorder()
+
+	// Serve the request - this should handle the panic but we can still make the test fail
+	app.Server.HTTP.ServeHTTP(w, req)
+
+	// Even if the framework recovers from panics, we can fail the test explicitly
+	// by checking for unexpected success
+	if w.Code == http.StatusOK {
+		t.Errorf("Expected non-200 status code due to panic, got: %d", w.Code)
 	}
-
-	return val, nil
-}
-
-func TraceHandler(c *gofr.Context) (any, error) {
-	defer c.Trace("traceHandler").End()
-
-	span2 := c.Trace("some-sample-work")
-	<-time.After(time.Millisecond * 1) //nolint:wsl    // Waiting for 1ms to simulate workload
-	defer span2.End()
-
-	// Ping redis 5 times concurrently and wait.
-	count := 5
-	wg := sync.WaitGroup{}
-	wg.Add(count)
-
-	for i := 0; i < count; i++ {
-		go func() {
-			c.Redis.Ping(c)
-			wg.Done()
-		}()
-	}
-	wg.Wait()
-
-	//Call to Another service
-	resp, err := c.GetHTTPService("anotherService").Get(c, "redis", nil)
-	if err != nil {
-		return nil, err
-	}
-
-	defer resp.Body.Close()
-
-	var data = struct {
-		Data any `json:"data"`
-	}{}
-
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	_ = json.Unmarshal(b, &data)
-
-	return data.Data, nil
-}
-
-func MysqlHandler(c *gofr.Context) (any, error) {
-	var value int
-	err := c.SQL.QueryRowContext(c, "select 2+2").Scan(&value)
-	if err != nil {
-		return nil, datasource.ErrorDB{Err: err, Message: "error from sql db"}
-	}
-
-	return value, nil
 }
