@@ -9,7 +9,6 @@ on:
     branches:
       - main
       - development
-      - testpassing
     paths-ignore:
       - 'docs/**'  # Ignore changes to docs folder
       - '**/*.md'
@@ -37,7 +36,7 @@ jobs:
 
     # Define service containers that tests depend on
     services:
-      # Kafka service with health check
+      # Kafka service
       kafka:
         image: bitnamilegacy/kafka:3.4.1
         ports:
@@ -54,13 +53,15 @@ jobs:
           KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 1@127.0.0.1:9093
           ALLOW_PLAINTEXT_LISTENER: yes
           KAFKA_CFG_NODE_ID: 1
-      # Redis service with health check
+
+      # Redis service
       redis:
         image: redis:7.0.5
         ports:
           - "6379:6379"
+        options: "--entrypoint redis-server"
 
-      # MySQL service with health check
+      # MySQL service
       mysql:
         image: mysql:8.2.0
         ports:
@@ -90,25 +91,12 @@ jobs:
       - name: Start Zipkin
         run: docker run -d -p 9411:9411 openzipkin/zipkin:latest
 
-      # Wait for all services to be healthy
-      - name: Wait for services to be ready
+      # Simple wait for services to be ready
+      - name: Wait for services
         run: |
-          echo "Waiting for services to be healthy..."
-          timeout 120s bash -c '
-            until docker inspect ${{ job.services.kafka.id }} --format "{{.State.Health.Status}}" | grep -q "healthy"; do
-              echo "Waiting for Kafka to be healthy..."
-              sleep 5
-            done
-            until docker inspect ${{ job.services.redis.id }} --format "{{.State.Health.Status}}" | grep -q "healthy"; do
-              echo "Waiting for Redis to be healthy..."
-              sleep 2
-            done
-            until docker inspect ${{ job.services.mysql.id }} --format "{{.State.Health.Status}}" | grep -q "healthy"; do
-              echo "Waiting for MySQL to be healthy..."
-              sleep 2
-            done
-          '
-          echo "All services are healthy!"
+          echo "Waiting for services to start..."
+          sleep 30
+          echo "Services should be ready now"
 
       # Run tests with automatic retry on failures
       - name: Test with Retry Logic
@@ -120,14 +108,13 @@ jobs:
           max_attempts: 2
           retry_on: error
           command: |
-            set -e  # Exit immediately on any command failure
-            set -o pipefail  # Capture pipe failures
+            set -e
+            set -o pipefail
             export APP_ENV=test
             
             echo "Running tests for examples directory..."
             
             # Run tests for the examples directory with coverage
-            # Exit code will be non-zero if any test fails
             go test ./examples/... -v -short -covermode=atomic -coverprofile packageWithpbgo.cov -coverpkg=./examples/...
             
             # Filter out auto-generated files by protobuf and gofr framework from coverage report
@@ -179,19 +166,15 @@ jobs:
           max_attempts: 2
           retry_on: error
           command: |
-            set -e  # Exit immediately on any command failure
-            set -o pipefail  # Capture pipe failures
+            set -e
+            set -o pipefail
             export APP_ENV=test
             
             echo "Running tests for root gofr package..."
-            
-            # Run tests for root gofr package
             go test -v -short -covermode=atomic \
               -coverpkg=./pkg/gofr -coverprofile=gofr_only.cov ./pkg/gofr
             
             echo "Running tests for gofr sub-packages..."
-            
-            # Run tests for sub-packages
             go test -v -covermode=atomic \
               -coverpkg=./pkg/gofr -coverprofile=submodules.cov ./pkg/gofr/...
             
@@ -282,8 +265,8 @@ jobs:
           max_attempts: 2
           retry_on: error
           command: |
-            set -e  # Exit immediately on any command failure
-            set -o pipefail  # Capture pipe failures
+            set -e
+            set -o pipefail
             export APP_ENV=test
             
             # Create a directory for coverage reports
