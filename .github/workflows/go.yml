@@ -115,22 +115,29 @@ jobs:
             
             echo "Running tests for examples directory..."
             
-            # Run tests for the examples directory with coverage
-            go test ./examples/... -v -short -covermode=atomic -coverprofile packageWithpbgo.cov -coverpkg=./examples/...
+            # Run tests without coverage first to see if they pass
+            go test ./examples/... -v -short -timeout=10m
             
-            # Filter out auto-generated files by protobuf and gofr framework from coverage report
-            grep -vE '(/client/|grpc-.+-client/main\.go|_client\.go|_gofr\.go|_grpc\.pb\.go|\.pb\.go|\.proto|health_.*\.go)' packageWithpbgo.cov > profile.cov || true
+            # If tests pass, run with coverage
+            go test ./examples/... -v -short -timeout=10m -covermode=atomic -coverprofile packageWithpbgo.cov -coverpkg=./examples/...
             
-            # Display coverage statistics
-            go tool cover -func profile.cov
+            # Filter out auto-generated files
+            if [ -f packageWithpbgo.cov ]; then
+              grep -vE '(/client/|grpc-.+-client/main\.go|_client\.go|_gofr\.go|_grpc\.pb\.go|\.pb\.go|\.proto|health_.*\.go)' packageWithpbgo.cov > profile.cov || true
+              
+              # Display coverage statistics only if profile exists
+              if [ -f profile.cov ] && [ -s profile.cov ]; then
+                go tool cover -func profile.cov
+              fi
+            fi
 
-      # Upload coverage report for the 1.24 Go version only
-      - name: Upload Test Coverage
-        if: ${{ matrix.go-version == '1.24'}}
-        uses: actions/upload-artifact@v5
-        with:
-          name: Example-Test-Report
-          path: profile.cov
+            # Upload coverage report for the 1.24 Go version only
+            - name: Upload Test Coverage
+              if: ${{ matrix.go-version == '1.24'}}
+              uses: actions/upload-artifact@v5
+              with:
+                name: Example-Test-Report
+                path: profile.cov
 
   # Job for testing the pkg directory
   PKG-Unit-Testing:
