@@ -10,6 +10,7 @@ on:
     branches:
       - main
       - development
+      - testpassing
     paths-ignore:
       - 'docs/**'  # Ignore changes to docs folder
       - '**/*.md'
