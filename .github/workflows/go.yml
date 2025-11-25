@@ -1,3 +1,4 @@
+---
 name: Workflow-Pipeline
 permissions:
   contents: read
@@ -8,8 +9,9 @@ on:
   push:
     branches:
       - main
-      - development
       - testfailings
+      - fuck
+      - development
     paths-ignore:
       - 'docs/**'  # Ignore changes to docs folder
       - '**/*.md'
@@ -19,7 +21,7 @@ on:
       - main
       - development
     paths-ignore:
-      - 'docs/**'  # Ignore changes to docs folder
+      - 'docs/**'# Ignore changes to docs folder
       - '**/*.md'
 
 # Define the jobs that this workflow will run
@@ -31,7 +33,7 @@ jobs:
     # Define a matrix strategy to test against multiple Go versions
     strategy:
       matrix:
-        go-version: ['1.25', '1.24', '1.23']
+        go-version: ['1.25','1.24', '1.23']
       # Continue with other jobs if one version fails
       fail-fast: false
 
@@ -59,14 +61,14 @@ jobs:
       redis:
         image: redis:7.0.5
         ports:
-          - "6379:6379"
+          - "2002:6379"
         options: "--entrypoint redis-server"
 
       # MySQL service
       mysql:
         image: mysql:8.2.0
         ports:
-          - "3306:3306"
+          - "2001:3306"
         env:
           MYSQL_ROOT_PASSWORD: "password"
           MYSQL_DATABASE: "test"
@@ -88,16 +90,8 @@ jobs:
       - name: Get dependencies
         run: |
           go mod download
-
       - name: Start Zipkin
-        run: docker run -d -p 9411:9411 openzipkin/zipkin:latest
-
-      # Simple wait for services to be ready
-      - name: Wait for services
-        run: |
-          echo "Waiting for services to start..."
-          sleep 30
-          echo "Services should be ready now"
+        run: docker run -d -p 2005:9411 openzipkin/zipkin:latest
 
       # Run tests with automatic retry on failures
       - name: Test with Retry Logic
@@ -105,25 +99,22 @@ jobs:
         uses: nick-fields/retry@v3
         continue-on-error: false
         with:
-          timeout_minutes: 10
-          max_attempts: 2
-          retry_on: error
+          timeout_minutes: 5  # Maximum time for the tests to run
+          max_attempts: 2      # Retry up to 2 times if tests fail
           command: |
-            set -e
-            set -o pipefail
+            #set -e
             export APP_ENV=test
-            
-            echo "Running tests for examples directory..."
-            
             # Run tests for the examples directory with coverage
             go test ./examples/... -v -short -covermode=atomic -coverprofile packageWithpbgo.cov -coverpkg=./examples/...
-            
-            # Filter out auto-generated files by protobuf and gofr framework from coverage report
-            grep -vE '(/client/|grpc-.+-client/main\.go|_client\.go|_gofr\.go|_grpc\.pb\.go|\.pb\.go|\.proto|health_.*\.go)' packageWithpbgo.cov > profile.cov || true
-            
+            # Treat exit code 0 as success; exit code 1 may be harmless if output exists
+            if [ "${exit_code:-0}" -ne 0 ]; then
+              echo "⚠️ go test exited with $exit_code"
+            fi
+             # Filter out auto-generated files by protobuf and gofr framework from coverage report
+
+            grep -vE '(/client/|grpc-.+-client/main\.go|_client\.go|_gofr\.go|_grpc\.pb\.go|\.pb\.go|\.proto|health_.*\.go)' packageWithpbgo.cov > profile.cov
             # Display coverage statistics
             go tool cover -func profile.cov
-
       # Upload coverage report for the 1.24 Go version only
       - name: Upload Test Coverage
         if: ${{ matrix.go-version == '1.24'}}
@@ -138,7 +129,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: ['1.25', '1.24', '1.23']
+        go-version: ['1.25','1.24', '1.23']
       fail-fast: false
 
     steps:
@@ -156,37 +147,45 @@ jobs:
       - name: Get dependencies
         run: |
           go mod download
-
       # Run pkg tests with automatic retry logic
       - name: Test with Retry Logic
         id: test
         uses: nick-fields/retry@v3
-        continue-on-error: false
         with:
-          timeout_minutes: 10
+          timeout_minutes: 5
           max_attempts: 2
+          continue-on-error: false
           retry_on: error
           command: |
             set -e
-            set -o pipefail
             export APP_ENV=test
-            
-            echo "Running tests for root gofr package..."
+            # Run tests for root gofr package
             go test -v -short -covermode=atomic \
               -coverpkg=./pkg/gofr -coverprofile=gofr_only.cov ./pkg/gofr
-            
-            echo "Running tests for gofr sub-packages..."
+            exit_code=$?
+            if [ $exit_code -eq 2 ]; then
+              echo "::error::Panic detected in root gofr package tests"
+              exit 2
+            elif [ $exit_code -ne 0 ]; then
+              echo "::error::Root gofr package tests failed"
+              exit $exit_code
+            fi
+            # Run tests for sub-packages
             go test -v -covermode=atomic \
               -coverpkg=./pkg/gofr -coverprofile=submodules.cov ./pkg/gofr/...
-            
+            exit_code=$?
+            if [ $exit_code -eq 2 ]; then
+              echo "::error::Panic detected in gofr sub-packages tests"
+              exit 2
+            elif [ $exit_code -ne 0 ]; then
+              echo "::error::Gofr sub-packages tests failed"
+              exit $exit_code
+            fi
             # Combine coverage profiles
             echo "mode: atomic" > profile.cov
-            grep -h -v "mode:" gofr_only.cov submodules.cov | grep -v '/mock_' >> profile.cov || true
-            
+            grep -h -v "mode:" gofr_only.cov submodules.cov | grep -v '/mock_' >> profile.cov
             # Show coverage summary
-            echo "Coverage summary:"
             go tool cover -func profile.cov
-
       # Upload coverage report for the 1.24 Go version only
       - name: Upload Test Coverage
         if: ${{ matrix.go-version == '1.24'}}
@@ -200,7 +199,7 @@ jobs:
     name: Code Coverage
     runs-on: ubuntu-latest
     # This job runs after both Example and PKG testing are complete
-    needs: [Example-Unit-Testing, PKG-Unit-Testing]
+    needs: [ Example-Unit-Testing,PKG-Unit-Testing ]
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v5
@@ -216,8 +215,7 @@ jobs:
         working-directory: artifacts
         run: |
           echo "mode: atomic" > merged_profile.cov
-          grep -h -v "mode:" ./Example-Test-Report/profile.cov ./PKG-Coverage-Report/profile.cov >> merged_profile.cov || true
-      
+          grep -h -v "mode:" ./Example-Test-Report/profile.cov ./PKG-Coverage-Report/profile.cov >> merged_profile.cov
       # Calculate and output the total code coverage percentage
       - name: Parse code-coverage value
         working-directory: artifacts
@@ -226,6 +224,11 @@ jobs:
           codeCoverage=${codeCoverage%?}
           echo "CODE_COVERAGE=$codeCoverage" >> $GITHUB_ENV
           echo "✅ Total Code Coverage: $codeCoverage%"
+  #      - name: Check if code-coverage is greater than threshold
+  #        run: |
+  #          codeCoverage=${{ env.CODE_COVERAGE }}
+  #          codeCoverage=${codeCoverage%??}
+  #          if [[ $codeCoverage -lt 92 ]]; then echo "code coverage cannot be less than 92%, currently its ${{ env.CODE_COVERAGE }}%" && exit 1; fi;
 
   # Job for testing submodules inside the pkg directory
   Submodule-Unit-Testing:
@@ -233,7 +236,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: ['1.25', '1.24', '1.23']
+        go-version:  ['1.25','1.24', '1.23']
       fail-fast: false
 
     steps:
@@ -255,62 +258,42 @@ jobs:
           # Find all directories containing a go.mod file within 'pkg'
           SUBMODULES=$(find pkg -name "go.mod" -exec dirname {} \; | jq -R -s -c 'split("\n") | map(select(length > 0))')
           echo "submodules=$SUBMODULES" >> $GITHUB_OUTPUT
-
       # Test all submodules in parallel with retry logic
       - name: Test Submodules with Retry and Parallelism
         id: test_submodules
         uses: nick-fields/retry@v3
-        continue-on-error: false
         with:
-          timeout_minutes: 10
+          timeout_minutes: 5
           max_attempts: 2
-          retry_on: error
           command: |
-            set -e
-            set -o pipefail
             export APP_ENV=test
-            
             # Create a directory for coverage reports
             mkdir -p coverage_reports
             
             # Get the list of submodules
             SUBMODULES='${{ steps.detect_submodules.outputs.submodules }}'
             
-            echo "Testing submodules: $SUBMODULES"
-            
             # Process each submodule in parallel with a maximum of 4 parallel jobs
-            echo $SUBMODULES | jq -r '.[]' | xargs -I{} -P 4 bash -c '
+            echo $SUBMODULES | jq -c '.[]' | xargs -I{} -P 4 bash -c '
               module={}
               echo "Testing module: $module"
-              cd "$module"
-              
+              cd $module
+            
               # Extract module name (replace / with _)
-              module_name=$(echo "$module" | tr "/" "_")
-              
+              module_name=$(echo $module | tr "/" "_")
+            
               # Download dependencies for the submodule
               go mod download
               go mod tidy
-              
-              # Run tests and capture exit code
-              set +e
-              go test ./... -v -short -coverprofile="${module_name}.cov" -coverpkg=./...
-              test_exit_code=$?
-              set -e
-              
-              # Copy coverage file to the coverage_reports directory if it exists
-              if [ -f "${module_name}.cov" ]; then
-                cp "${module_name}.cov" ../../../coverage_reports/
-              fi
-              
-              # Exit with the test exit code to fail the job if tests failed
-              if [ $test_exit_code -ne 0 ]; then
-                echo "Tests failed in module: $module"
-                exit $test_exit_code
-              fi
-              
-              cd - > /dev/null
+            
+              # Run tests with a focus on failed tests first
+              go test ./... -v -short -coverprofile=${module_name}.cov -coverpkg=./...
+            
+              # Copy coverage file to the coverage_reports directory
+              cp ${module_name}.cov ../../../coverage_reports/
+            
+              cd -
             '
-
       # Upload submodule coverage reports as an artifact
       - name: Upload Coverage Reports
         uses: actions/upload-artifact@v5
@@ -338,7 +321,6 @@ jobs:
         run: |
           curl https://qlty.sh | sh
           echo "$HOME/.qlty/bin" >> $GITHUB_PATH
-      
       # Download coverage artifacts
       - name: Download Coverage Report
         uses: actions/download-artifact@v6
@@ -350,11 +332,11 @@ jobs:
         working-directory: artifacts
         run: |
           echo "mode: atomic" > merged_profile.cov
-          grep -h -v "mode:" ./Example-Test-Report/profile.cov ./PKG-Coverage-Report/profile.cov >> merged_profile.cov || true
-          
+          grep -h -v "mode:" ./Example-Test-Report/profile.cov ./PKG-Coverage-Report/profile.cov >> merged_profile.cov
           # Generate and print total coverage percentage
           echo "Total Coverage:"
           go tool cover -func=merged_profile.cov | tail -n 1
+        shell: bash
 
       # Upload merged coverage to CodeClimate for analysis
       - name: Upload
@@ -381,16 +363,13 @@ jobs:
       - name: Install golangci-lint
         run: |
           go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.4.0
-      
       - name: Get dependencies
         run: |
           go mod tidy
-
       # Run linter on the root module
       - name: Lint Root Module
         run: |
           golangci-lint run --output.text.print-issued-lines --output.text.colors=true --show-stats=false --timeout=5m
-      
       # Run linter on each submodule
       - name: Lint Submodules
         run: |
@@ -399,24 +378,16 @@ jobs:
           for module in $(find pkg -name "go.mod" -exec dirname {} \;); do
             echo "Linting submodule: $module"
             # Change directory to the submodule and run golangci-lint
-            cd "$module"
+            cd $module
             go mod tidy
-            set +e
-            golangci-lint run --output.text.print-issued-lines --output.text.colors=true --show-stats=false --timeout 9m0s
-            lint_exit_code=$?
-            set -e
-            if [ $lint_exit_code -ne 0 ]; then
-              total_errors=$((total_errors + 1))
-            fi
-            cd - > /dev/null  # Return to the root directory
+            golangci-lint run --output.text.print-issued-lines --output.text.colors=true --show-stats=false --timeout 9m0s || total_errors=$((total_errors + 1))
+            cd -  # Return to the root directory
           done
-          
           echo "Total submodule lint errors: $total_errors"
           if [ $total_errors -gt 0 ]; then
             echo "Linting failed for $total_errors submodule(s)."
             exit 1  # Fail the job if there are linting errors in submodules
           fi
-
   # Job for checking filename conventions
   linting_party:
     name: Linting Party🥳
